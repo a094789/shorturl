@@ -184,34 +184,44 @@
 
                     <!-- 篩選表單 -->
                     <div x-show="showFilters" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform -translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" class="p-4 bg-gray-50 rounded-lg">
-                        <form action="{{ route('admin.users.index') }}" method="GET" class="space-y-4">
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <!-- 關鍵字搜尋 -->
-                                <div>
-                                    <label for="keyword" class="block text-sm font-medium text-gray-700 mb-1">關鍵字搜尋</label>
-                                    <input type="text" id="keyword" name="keyword" value="{{ $keyword }}" placeholder="名稱或Email" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                                </div>
-                                
-                                <!-- 權限篩選 -->
-                                <div>
-                                    <label for="role" class="block text-sm font-medium text-gray-700 mb-1">用戶權限</label>
-                                    <select id="role" name="role" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                                        <option value="">所有權限</option>
-                                        <option value="admin" {{ $role === 'admin' ? 'selected' : '' }}>管理員</option>
-                                        <option value="user" {{ $role === 'user' ? 'selected' : '' }}>一般用戶</option>
-                                    </select>
+                        <form action="{{ route('admin.users.index') }}" method="GET" class="space-y-6">
+                            <div class="space-y-6">
+                                <!-- 關鍵字和權限 -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <!-- 關鍵字搜尋 -->
+                                    <div>
+                                        <label for="keyword" class="block text-sm font-medium text-gray-700 mb-1">關鍵字搜尋</label>
+                                        <input 
+                                            type="text" 
+                                            id="keyword" 
+                                            name="keyword" 
+                                            value="{{ $keyword }}"
+                                            placeholder="搜尋名稱或 Email" 
+                                            class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm"
+                                        >
+                                    </div>
+                                    
+                                    <!-- 權限篩選 -->
+                                    <div>
+                                        <label for="role" class="block text-sm font-medium text-gray-700 mb-1">用戶權限</label>
+                                        <select id="role" name="role" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                            <option value="">所有權限</option>
+                                            <option value="admin" {{ $role === 'admin' ? 'selected' : '' }}>管理員</option>
+                                            <option value="aw4" {{ $role === 'aw4' ? 'selected' : '' }}>網路組教職員</option>
+                                            <option value="employees" {{ $role === 'employees' ? 'selected' : '' }}>教職員</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 
                                 <!-- 註冊日期範圍 -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">註冊日期範圍</label>
-                                    <div class="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <input type="date" id="date_from" name="date_from" value="{{ $date_from }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" placeholder="開始日期">
-                                        </div>
-                                        <div>
-                                            <input type="date" id="date_to" name="date_to" value="{{ $date_to }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" placeholder="結束日期">
-                                        </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
+                                        <input type="date" id="date_from" name="date_from" value="{{ $date_from }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
+                                        <input type="date" id="date_to" name="date_to" value="{{ $date_to }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
                                     </div>
                                 </div>
                             </div>
@@ -220,7 +230,7 @@
                             <input type="hidden" name="per_page" value="{{ $perPage }}">
                             
                             <!-- 篩選按鈕 -->
-                            <div class="flex items-center space-x-4 mt-6">
+                            <div class="flex items-center space-x-4">
                                 <!-- 提交按鈕 -->
                                 <x-primary-button>
                                     {{ __('篩選') }}
@@ -282,8 +292,18 @@
                                 <td class="px-6 py-4">{{ $user->email }}</td>
                                 <td class="px-6 py-4">{{ $user->created_at->format('Y-m-d H:i:s') }}</td>
                                 <td class="px-6 py-4">
-                                    <span class="px-2 py-1 text-xs font-semibold rounded-full {{ $user->is_admin ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800' }}">
-                                        {{ $user->is_admin ? '管理員' : '一般用戶' }}
+                                    <span class="px-2 py-1 text-xs font-semibold rounded-full 
+                                        @if($user->role_id === 1) bg-blue-100 text-blue-800
+                                        @elseif($user->role_id === 2) bg-green-100 text-green-800
+                                        @else bg-gray-100 text-gray-800
+                                        @endif">
+                                        @if($user->role_id === 1)
+                                            管理員
+                                        @elseif($user->role_id === 2)
+                                            網路組教職員
+                                        @else
+                                            教職員
+                                        @endif
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 flex items-center space-x-2">

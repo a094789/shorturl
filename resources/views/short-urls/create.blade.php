@@ -31,6 +31,28 @@
                             <x-input-error :messages="$errors->get('original_url')" class="mt-2" />
                         </div>
 
+                        @if(auth()->user()->isAdmin())
+                        <div class="mb-6">
+                            <label for="custom_code" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                                自訂短網址代碼
+                                <span class="text-xs text-gray-500 ml-1">(選填，僅限英文與數字)</span>
+                            </label>
+
+                            <input
+                                type="text"
+                                name="custom_code"
+                                id="custom_code"
+                                value="{{ old('custom_code') }}"
+                                pattern="[A-Za-z0-9]+"
+                                placeholder="輸入自訂代碼"
+                                class="w-full px-4 py-2 rounded-md border border-gray-300 focus:border-red-500 focus:ring-red-500 shadow-sm
+                                placeholder-gray-400 text-gray-800 dark:bg-zinc-900 dark:border-zinc-700 dark:text-white" />
+
+                            <p class="mt-1 text-xs text-gray-500">若不填寫則自動生成隨機代碼</p>
+                            <x-input-error :messages="$errors->get('custom_code')" class="mt-2" />
+                        </div>
+                        @endif
+
                         <!-- 過期時間選擇 -->
                         <div x-data="{ expireType: '{{ old('expire_type', '1_week') }}' }" class="mb-6">
                             <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">過期時間</label>

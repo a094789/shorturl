@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use App\Models\User;
 
 class LoginRequest extends FormRequest
 {
@@ -32,33 +33,26 @@ class LoginRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, \Illuminate\Contracts\Validation\Rule|array|string>
      */
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', 'email'],
+            'login' => ['required', 'string'],
             'password' => ['required', 'string'],
         ];
     }
 
     /**
-     * 取得驗證錯誤訊息
+     * Get custom messages for validator errors.
      *
-     * @return array
+     * @return array<string, string>
      */
-    public function messages()
+    public function messages(): array
     {
-        $throttleKey = $this->throttleKey();
-        $remainingAttempts = self::MAX_ATTEMPTS - RateLimiter::attempts($throttleKey);
-        $remainingText = $remainingAttempts > 0 
-            ? ' ' . trans('auth.remaining_attempts', ['attempts' => $remainingAttempts])
-            : '';
-        
         return [
-            'password.required' => trans('validation.required', ['attribute' => '密碼']) . $remainingText,
-            'email.required' => trans('validation.required', ['attribute' => '電子郵件']),
-            'email.email' => trans('validation.email', ['attribute' => '電子郵件']),
+            'login.required' => '請輸入 ID 或 Email',
+            'password.required' => '請輸入密碼',
         ];
     }
 
@@ -69,84 +63,58 @@ class LoginRequest extends FormRequest
      */
     public function authenticate(): void
     {
-        $throttleKey = $this->throttleKey();
-        
-        // 首先檢查是否被鎖定
-        if ($this->hasTooManyLoginAttempts()) {
-            event(new Lockout($this));
-            $this->throwLockoutException();
+        $this->ensureIsNotRateLimited();
+
+        // 嘗試使用 name_id 登入
+        $credentials = [
+            'name_id' => $this->login,
+            'password' => $this->password,
+        ];
+
+        if (Auth::attempt($credentials, $this->boolean('remember'))) {
+            RateLimiter::clear($this->throttleKey());
+            return;
         }
 
-        // 檢查憑證是否正確
-        $credentialsValid = Auth::attempt($this->only('email', 'password'), $this->boolean('remember'));
-        
-        if (!$credentialsValid) {
-            // 增加失敗嘗試次數
-            RateLimiter::hit($throttleKey, self::LOCKOUT_SECONDS);
-            
-            // 獲取剩餘嘗試次數
-            $remainingAttempts = self::MAX_ATTEMPTS - RateLimiter::attempts($throttleKey);
-            
-            // 如果剩餘嘗試次數小於等於0，表示已達到最大嘗試次數，拋出鎖定異常
-            if ($remainingAttempts <= 0) {
-                event(new Lockout($this));
-                $this->throwLockoutException();
-            }
-            
-            // 否則顯示剩餘嘗試次數
-            $message = trans('auth.password');
-            if ($remainingAttempts > 0) {
-                $message .= ' ' . trans('auth.remaining_attempts', ['attempts' => $remainingAttempts]);
-            }
+        // 如果 name_id 登入失敗，嘗試使用 email 登入
+        $credentials = [
+            'email' => $this->login,
+            'password' => $this->password,
+        ];
 
-            throw ValidationException::withMessages([
-                'email' => $message,
-            ]);
+        if (Auth::attempt($credentials, $this->boolean('remember'))) {
+            RateLimiter::clear($this->throttleKey());
+            return;
         }
 
-        // 登入成功，清除嘗試記錄
-        RateLimiter::clear($throttleKey);
-    }
+        RateLimiter::hit($this->throttleKey());
 
-    /**
-     * 檢查是否有太多登入嘗試
-     */
-    private function hasTooManyLoginAttempts(): bool
-    {
-        return RateLimiter::tooManyAttempts(
-            $this->throttleKey(), 
-            self::MAX_ATTEMPTS
-        );
-    }
-
-    /**
-     * 拋出鎖定異常
-     */
-    private function throwLockoutException(): void
-    {
-        $seconds = self::LOCKOUT_SECONDS;
         throw ValidationException::withMessages([
-            'email' => trans('auth.throttle', [
-                'seconds' => $seconds,
-                'minutes' => ceil($seconds / 60),
-                'hours' => ceil($seconds / 3600),
-            ]),
+            'login' => trans('auth.failed'),
         ]);
     }
 
     /**
-     * 確認登入請求未被限制
-     * 
+     * Ensure the login request is not rate limited.
+     *
      * @throws \Illuminate\Validation\ValidationException
      */
     public function ensureIsNotRateLimited(): void
     {
-        if (!$this->hasTooManyLoginAttempts()) {
+        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
             return;
         }
 
         event(new Lockout($this));
-        $this->throwLockoutException();
+
+        $seconds = RateLimiter::availableIn($this->throttleKey());
+
+        throw ValidationException::withMessages([
+            'login' => trans('auth.throttle', [
+                'seconds' => $seconds,
+                'minutes' => ceil($seconds / 60),
+            ]),
+        ]);
     }
 
     /**
@@ -154,6 +122,6 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        return Str::transliterate(Str::lower($this->input('login')).'|'.$this->ip());
     }
 }

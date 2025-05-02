@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Carbon\Carbon;
 
 class ShortUrl extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -20,7 +22,8 @@ class ShortUrl extends Model
         'original_url',
         'short_code',
         'user_id',
-        'expires_at'
+        'expires_at',
+        'auto_cleanup_at'
     ];
 
     /**
@@ -32,6 +35,8 @@ class ShortUrl extends Model
         'expires_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+        'auto_cleanup_at' => 'datetime'
     ];
 
     /**
@@ -141,5 +146,21 @@ class ShortUrl extends Model
                 }
             }
         });
+
+        static::deleting(function ($shortUrl) {
+            // 只在軟刪除時設置自動清理時間
+            if (!$shortUrl->isForceDeleting()) {
+                $shortUrl->auto_cleanup_at = Carbon::now()->addWeek();
+                $shortUrl->save();
+            }
+        });
+    }
+
+    /**
+     * 檢查是否可以復原刪除
+     */
+    public function canRestore()
+    {
+        return $this->auto_cleanup_at && $this->auto_cleanup_at->isFuture();
     }
 } 

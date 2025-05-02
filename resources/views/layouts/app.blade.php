@@ -40,6 +40,10 @@
                                class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium">
                                 管理短網址
                             </a>
+                            <a href="{{ route('short-urls.trashed') }}"
+                               class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium">
+                                已刪除的短網址
+                            </a>
                             @if (Auth::user()->is_admin)
                             <!-- 管理員下拉選單 -->
                             <div class="relative" x-data="{ adminMenuOpen: false }" @click.away="adminMenuOpen = false">
@@ -141,6 +145,10 @@
                         <a href="{{ route('short-urls.index') }}"
                             class="block px-4 py-2 text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800">
                             管理短網址
+                        </a>
+                        <a href="{{ route('short-urls.trashed') }}"
+                            class="block px-4 py-2 text-base font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800">
+                            已刪除的短網址
                         </a>
                         @if (Auth::user()->is_admin)
                         <!-- 手機版管理員選單 -->

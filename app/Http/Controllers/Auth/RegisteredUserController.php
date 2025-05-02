@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Providers\RouteServiceProvider;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,46 +31,27 @@ class RegisteredUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'name' => [
-                'required', 
-                'string', 
-                'min:2',
-                'regex:/^[\x{4e00}-\x{9fa5}a-zA-Z\-]+$/u', // 只允許中文、英文和連字符
-                function ($attribute, $value, $fail) {
-                    // 中文字符計數
-                    $chineseCount = preg_match_all('/[\x{4e00}-\x{9fa5}]/u', $value);
-                    // 英文字符計數
-                    $englishCount = preg_match_all('/[a-zA-Z]/', $value);
-                    
-                    if ($chineseCount > 10) {
-                        $fail('中文字符不能超過10個');
-                    }
-                    
-                    if ($englishCount > 20) {
-                        $fail('英文字符不能超過20個');
-                    }
-                },
+            'name' => ['required', 'string', 'max:255'],
+            'name_id' => [
+                'required',
+                'string',
+                'max:255',
+                'unique:users',
+                'regex:/^[a-zA-Z0-9_-]+$/',
+                'min:3'
             ],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
-            'password' => [
-                'required', 
-                'confirmed', 
-                'min:6',
-                'max:50',
-                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/',
-                Rules\Password::defaults()
-            ],
-            'g-recaptcha-response' => ['required', 'recaptcha'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ], [
-            'name.regex' => '名字只能包含中文、英文和連字符(-)。',
-            'name.min' => '名字至少需要2個字元。',
-            'password.regex' => '密碼必須包含至少一個小寫字母、一個大寫字母和一個數字。',
-            'g-recaptcha-response.required' => '請完成人機驗證。',
-            'g-recaptcha-response.recaptcha' => '人機驗證失敗，請重試。',
+            'name_id.required' => '請輸入名稱 ID',
+            'name_id.unique' => '此名稱 ID 已被使用',
+            'name_id.regex' => '名稱 ID 只能包含字母、數字、底線和連字符',
+            'name_id.min' => '名稱 ID 至少需要 3 個字元'
         ]);
 
         $user = User::create([
             'name' => $request->name,
+            'name_id' => $request->name_id,
             'email' => $request->email,
             'password' => Hash::make($request->password),
         ]);
@@ -78,6 +60,6 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        return redirect(route('dashboard', absolute: false));
+        return redirect(RouteServiceProvider::HOME);
     }
 }

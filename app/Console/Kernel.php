@@ -12,12 +12,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // 每週執行一次短網址回收，回收90天前過期且點擊次數少於5次的短網址
-        $schedule->command('shorturl:recycle --days=90 --min-clicks=5')
-                 ->weekly()
-                 ->sundays()
-                 ->at('23:00')
-                 ->appendOutputTo(storage_path('logs/shorturl-recycle.log'));
+        // 每天凌晨執行清理軟刪除的短網址
+        $schedule->command('urls:cleanup-deleted')->daily();
     }
 
     /**

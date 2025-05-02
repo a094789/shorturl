@@ -28,13 +28,19 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $data = $request->validated();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        // 只更新有變更的欄位
+        if ($request->filled('name')) {
+            $user->name = $data['name'];
+        }
+        if ($request->filled('email') && $request->email !== $user->email) {
+            $user->email = $data['email'];
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user->save();
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }

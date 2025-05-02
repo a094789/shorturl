@@ -54,19 +54,22 @@ Route::middleware('auth')->group(function () {
     Route::resource('short-urls', ShortUrlController::class)->only([
         'index',
         'create',
-        'store',
-        'destroy'
+        'store'
     ])->parameters([
         'short_urls' => 'shortUrl'
     ]);
 
     // 短網址額外功能
-    Route::controller(ShortUrlController::class)->prefix('short-urls')->name('short-urls.')->group(function () {
-        Route::get('{shortUrl}/clicks', 'showClicks')->name('clicks');
+    Route::controller(ShortUrlController::class)->group(function () {
+        Route::get('short-urls/trashed', 'trashed')->name('short-urls.trashed');
+        Route::post('short-urls/{id}/restore', 'restore')->name('short-urls.restore');
+        Route::delete('short-urls/{id}/force', 'forceDelete')->name('short-urls.force-delete');
+        Route::get('short-urls/{shortUrl}/clicks', 'showClicks')->name('short-urls.clicks');
+        Route::delete('short-urls/{shortUrl}', 'destroy')->name('short-urls.destroy');
 
         // QR 碼相關
-        Route::match(['get', 'post'], '{shortUrl}/qrcode', 'qrcode')->name('qrcode');
-        Route::match(['get', 'post'], '{shortUrl}/qrcode/download', 'downloadQrCode')->name('qrcode.download');
+        Route::match(['get', 'post'], 'short-urls/{shortUrl}/qrcode', 'qrcode')->name('short-urls.qrcode');
+        Route::match(['get', 'post'], 'short-urls/{shortUrl}/qrcode/download', 'downloadQrCode')->name('short-urls.qrcode.download');
     });
 
     // 管理員專用功能
@@ -82,6 +85,7 @@ Route::middleware('auth')->group(function () {
                 'destroy'
             ]);
             Route::patch('users/{user}/toggle-admin', [UserController::class, 'toggleAdmin'])->name('users.toggle-admin');
+            Route::get('users/search', [UserController::class, 'search'])->name('users.search');
 
             // 用戶鎖定管理
             Route::controller(UserLockController::class)->prefix('user-locks')->name('user-locks.')->group(function () {

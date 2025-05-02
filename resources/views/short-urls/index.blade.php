@@ -51,6 +51,12 @@
                                         {{ !empty($date_to) ? $date_to : '最新' }}
                                     </span>
                                 @endif
+
+                                @if(!empty($creator) && Auth::user()->isAdmin())
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                        建立者: {{ $users->firstWhere('id', $creator)->name }}
+                                    </span>
+                                @endif
                                 
                                 <a href="{{ route('short-urls.index') }}" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 hover:bg-red-200">
                                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -82,41 +88,111 @@
 
                         <!-- 篩選表單 -->
                         <div x-show="showFilters" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform -translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" class="p-4 bg-gray-50 rounded-lg">
-                            <form method="GET" action="{{ route('short-urls.index') }}" class="space-y-4">
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <!-- 關鍵字搜尋 -->
-                                    <div>
-                                        <label for="keyword" class="block text-sm font-medium text-gray-700 mb-1">關鍵字搜尋</label>
-                                        <input type="text" id="keyword" name="keyword" value="{{ $keyword }}" placeholder="輸入原網址或短網址代碼" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                            <form method="GET" action="{{ route('short-urls.index') }}" class="space-y-6">
+                                <div class="space-y-6">
+                                    <!-- 關鍵字和建立者 -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <!-- 關鍵字搜尋 -->
+                                        <div>
+                                            <label for="keyword" class="block text-sm font-medium text-gray-700 mb-1">關鍵字搜尋</label>
+                                            <input type="text" id="keyword" name="keyword" value="{{ request('keyword') }}" placeholder="輸入原網址或短網址代碼" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                        </div>
+                                        
+                                        <!-- 建立者篩選 -->
+                                        @if(Auth::user()->isAdmin())
+                                        <div x-data="{ 
+                                            open: false,
+                                            search: '',
+                                            selectedId: '{{ request('creator') }}',
+                                            selectedName: '{{ $users->where('id', request('creator'))->first()?->name ?? '' }}',
+                                            users: {{ Js::from($users) }},
+                                            get filteredUsers() {
+                                                if (!this.search) return this.users;
+                                                return this.users.filter(user => 
+                                                    user.name.toLowerCase().includes(this.search.toLowerCase())
+                                                );
+                                            }
+                                        }">
+                                            <label for="creator" class="block text-sm font-medium text-gray-700 mb-1">建立者</label>
+                                            <div class="relative">
+                                                <input
+                                                    type="text"
+                                                    x-model="search"
+                                                    x-on:focus="open = true"
+                                                    x-on:click="open = true"
+                                                    :placeholder="selectedName || '搜尋建立者...'"
+                                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm"
+                                                >
+                                                <input type="hidden" name="creator" x-model="selectedId">
+                                                
+                                                <!-- 下拉選單 -->
+                                                <div
+                                                    x-show="open"
+                                                    x-on:click.away="open = false"
+                                                    class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                                                    style="display: none;"
+                                                >
+                                                    <!-- 清除選擇 -->
+                                                    <div
+                                                        x-on:click="selectedId = ''; selectedName = ''; search = ''; open = false"
+                                                        class="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                                    >
+                                                        全部使用者
+                                                    </div>
+                                                    
+                                                    <!-- 使用者列表 -->
+                                                    <template x-for="user in filteredUsers" :key="user.id">
+                                                        <div
+                                                            x-on:click="selectedId = user.id; selectedName = user.name; search = user.name; open = false"
+                                                            class="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                                            :class="{'bg-gray-50': selectedId == user.id}"
+                                                        >
+                                                            <span x-text="user.name"></span>
+                                                        </div>
+                                                    </template>
+                                                    
+                                                    <!-- 無結果提示 -->
+                                                    <div
+                                                        x-show="filteredUsers.length === 0"
+                                                        class="px-4 py-2 text-sm text-gray-500"
+                                                    >
+                                                        找不到符合的使用者
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @endif
                                     </div>
-                                    
-                                    <!-- 過期狀態篩選 -->
-                                    <div>
-                                        <label for="status" class="block text-sm font-medium text-gray-700 mb-1">過期狀態</label>
-                                        <select id="status" name="status" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
-                                            <option value="">全部</option>
-                                            <option value="active" {{ $status == 'active' ? 'selected' : '' }}>有效</option>
-                                            <option value="expired" {{ $status == 'expired' ? 'selected' : '' }}>已過期</option>
-                                            <option value="permanent" {{ $status == 'permanent' ? 'selected' : '' }}>永久有效</option>
-                                        </select>
+
+                                    <!-- 過期狀態和日期範圍 -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <!-- 過期狀態篩選 -->
+                                        <div>
+                                            <label for="status" class="block text-sm font-medium text-gray-700 mb-1">過期狀態</label>
+                                            <select id="status" name="status" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                                <option value="">全部</option>
+                                                <option value="active" {{ request('status') == 'active' ? 'selected' : '' }}>有效</option>
+                                                <option value="expired" {{ request('status') == 'expired' ? 'selected' : '' }}>已過期</option>
+                                                <option value="permanent" {{ request('status') == 'permanent' ? 'selected' : '' }}>永久有效</option>
+                                            </select>
+                                        </div>
                                     </div>
                                     
                                     <!-- 日期範圍 -->
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">建立日期範圍</label>
-                                        <div class="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <input type="date" id="date_from" name="date_from" value="{{ $date_from }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" placeholder="開始日期">
-                                            </div>
-                                            <div>
-                                                <input type="date" id="date_to" name="date_to" value="{{ $date_to }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm" placeholder="結束日期">
-                                            </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
+                                            <input type="date" id="date_from" name="date_from" value="{{ request('date_from') }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
+                                            <input type="date" id="date_to" name="date_to" value="{{ request('date_to') }}" class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <!-- 每頁顯示筆數 (作為篩選表單的一部分) -->
-                                <input type="hidden" name="per_page" value="{{ $perPage }}">
+                                <input type="hidden" name="per_page" value="{{ request('per_page', 10) }}">
                                 
                                 <!-- 排序設置 (當篩選表單提交時保留排序設置) -->
                                 @if(request('sort_by'))
@@ -127,7 +203,7 @@
                                 @endif
                                 
                                 <!-- 篩選按鈕 -->
-                                <div class="flex items-center space-x-4 mt-6">
+                                <div class="flex items-center space-x-4">
                                     <!-- 提交按鈕 -->
                                     <x-primary-button>
                                         {{ __('篩選') }}
@@ -193,18 +269,18 @@
                             <div class="p-4" @click="expanded = !expanded">
                                 <div class="flex justify-between items-center">
                                     <div>
-                                        <label class="text-xs text-gray-500">短網址</label>
-                                        <div class="flex items-center space-x-2">
+                                <label class="text-xs text-gray-500">短網址</label>
+                                <div class="flex items-center space-x-2">
                                             <a href="{{ $url->short_url }}" target="_blank" class="text-red-600 hover:text-red-800" @click.stop>
-                                                {{ $url->short_code }}
-                                            </a>
+                                        {{ $url->short_code }}
+                                    </a>
                                             <button onclick="copyToClipboard('{{ $url->short_url }}')" @click.stop class="text-gray-400 hover:text-gray-600">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
                                     <div class="flex items-center">
                                         <span class="mr-3 text-sm">{{ $url->clicks }} 次點擊</span>
                                         <svg class="w-5 h-5 text-gray-500 transition-transform" :class="expanded ? 'transform rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,12 +297,12 @@
                                     </a>
                                 </div>
                                 <div class="grid grid-cols-2 gap-3 mb-3">
-                                    <div>
-                                        <label class="text-xs text-gray-500">建立者</label>
-                                        <p>{{ $url->user->name }}</p>
-                                    </div>
-                                    <div>
-                                        <label class="text-xs text-gray-500">建立時間</label>
+                                <div>
+                                    <label class="text-xs text-gray-500">建立者</label>
+                                    <p>{{ $url->user->name }}</p>
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500">建立時間</label>
                                         <p class="text-sm text-gray-900">{{ $url->created_at->format('Y-m-d H:i:s') }}</p>
                                     </div>
                                 </div>
@@ -235,32 +311,35 @@
                                     <p class="text-sm {{ $url->expires_at && $url->expires_at->isPast() ? 'text-red-600' : 'text-gray-900' }}">
                                         {{ $url->expires_at ? $url->expires_at->format('Y-m-d H:i:s') : '永久有效' }}
                                     </p>
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <button type="button"
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <button type="button"
                                         @click="showQrCode('{{ route('short-urls.qrcode', $url->id) }}')"
-                                        class="text-gray-600 hover:text-gray-900 p-2 rounded-full hover:bg-gray-100">
-                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                    class="text-gray-600 hover:text-gray-900 p-2 rounded-full hover:bg-gray-100">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                    </svg>
+                                </button>
+                                <div class="flex items-center space-x-4">
+                                    <a href="/short-urls/{{ $url->id }}/clicks" class="text-blue-600 hover:text-blue-900">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                         </svg>
-                                    </button>
-                                    <div class="flex items-center space-x-4">
-                                        <a href="/short-urls/{{ $url->id }}/clicks" class="text-blue-600 hover:text-blue-900">
+                                    </a>
+                                        <form action="{{ route('short-urls.destroy', $url->id) }}" 
+                                              method="POST" 
+                                              class="inline-block" 
+                                              onsubmit="return confirm('確定要刪除這個短網址嗎？可在一週內復原。');">
+                                        @csrf
+                                        @method('DELETE')
+                                            <button type="submit" class="text-red-600 hover:text-red-900">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                             </svg>
-                                        </a>
-                                        <form method="POST" action="{{ route('short-urls.destroy', $url) }}" class="inline-block">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="text-red-600 hover:text-red-900" onclick="return confirm('確定要刪除這個短網址嗎？')">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </form>
+                                        </button>
+                                    </form>
                                     </div>
                                 </div>
                             </div>
@@ -332,28 +411,28 @@
                                     </th>
                                     <th scope="col" class="px-6 py-3 w-[20%]">建立者</th>
                                     <th scope="col" class="px-6 py-3 w-[10%]">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
+                </tr>
+            </thead>
+            <tbody>
                                 @foreach($urls as $url)
                                 <tr class="bg-white border-b hover:bg-gray-50">
                                     <td class="px-6 py-4">
                                         <a href="{{ $url->original_url }}" target="_blank" class="text-gray-900 hover:text-red-600 truncate max-w-[150px] block" title="{{ $url->original_url }}">
                                             {{ Str::limit($url->original_url, 20) }}
-                                        </a>
-                                    </td>
-                                    <td class="px-6 py-4">
+                            </a>
+                        </td>
+                        <td class="px-6 py-4">
                                         <div class="flex items-center space-x-2">
                                             <a href="{{ $url->short_url }}" target="_blank" class="text-red-600 hover:text-red-900">
-                                                {{ $url->short_code }}
-                                            </a>
+                                    {{ $url->short_code }}
+                                </a>
                                             <button onclick="copyToClipboard('{{ $url->short_url }}')" @click.stop class="text-gray-400 hover:text-gray-600">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </td>
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
                                     <td class="px-6 py-4">
                                         <button type="button"
                                             @click="showQrCode('{{ route('short-urls.qrcode', $url->id) }}')"
@@ -364,17 +443,17 @@
                                             </svg>
                                         </button>
                                     </td>
-                                    <td class="px-6 py-4">{{ $url->clicks }}</td>
+                        <td class="px-6 py-4">{{ $url->clicks }}</td>
                                     <td class="px-6 py-4">{{ $url->created_at->format('Y-m-d H:i:s') }}</td>
-                                    <td class="px-6 py-4">
+                        <td class="px-6 py-4">
                                         <span class="{{ $url->expires_at && $url->expires_at->isPast() ? 'text-red-600' : 'text-gray-900' }}">
                                             {{ $url->expires_at ? $url->expires_at->format('Y-m-d H:i:s') : '永久有效' }}
-                                        </span>
-                                    </td>
+                                </span>
+                        </td>
                                     <td class="px-6 py-4 whitespace-normal break-words">
                                         <span class="inline-block">{{ $url->user->name }}</span>
                                     </td>
-                                    <td class="px-6 py-4">
+                        <td class="px-6 py-4">
                                         <div class="flex items-center space-x-4">
                                             <a href="/short-urls/{{ $url->id }}/clicks" class="text-blue-600 hover:text-blue-900">
                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -382,27 +461,30 @@
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                                 </svg>
                                             </a>
-                                            <form method="POST" action="{{ route('short-urls.destroy', $url) }}" class="inline-block">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="text-red-600 hover:text-red-900" onclick="return confirm('確定要刪除這個短網址嗎？')">
+                                            <form action="{{ route('short-urls.destroy', $url->id) }}" 
+                                                  method="POST" 
+                                                  class="inline-block" 
+                                                  onsubmit="return confirm('確定要刪除這個短網址嗎？可在一週內復原。');">
+                                @csrf
+                                @method('DELETE')
+                                                <button type="submit" class="text-red-600 hover:text-red-900">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                     </svg>
                                                 </button>
-                                            </form>
+                            </form>
                                         </div>
-                                    </td>
-                                </tr>
+                        </td>
+                    </tr>
                                 @endforeach
-                            </tbody>
-                        </table>
+            </tbody>
+        </table>
                         
                         <!-- 分頁導航 -->
                         <div class="mt-6">
                             {{ $urls->appends(request()->except('page'))->links() }}
                         </div>
-                    </div>
+    </div>
                 </div>
             </div>
         </div>
@@ -439,9 +521,9 @@
 
                 <div class="flex justify-end space-x-4 mt-6">
                     <div class="mr-auto">
-                        <x-secondary-button @click="$dispatch('close')">
-                            關閉
-                        </x-secondary-button>
+                    <x-secondary-button @click="$dispatch('close')">
+                        關閉
+                    </x-secondary-button>
                     </div>
                     <x-primary-button id="downloadQrCode" class="bg-red-600 hover:bg-red-700">
                         下載 QR Code
@@ -473,6 +555,74 @@
                 document.body.removeChild(textArea);
             }
         }
+
+        // 建立者搜尋功能
+        document.addEventListener('DOMContentLoaded', function() {
+            const creatorSearch = document.getElementById('creatorSearch');
+            const creatorInput = document.getElementById('creator');
+            const creatorResults = document.getElementById('creatorResults');
+            const users = @json($users);
+            let selectedUser = null;
+
+            // 如果有選擇的建立者，顯示其名稱
+            if (creatorInput.value) {
+                const selectedUser = users.find(user => user.id == creatorInput.value);
+                if (selectedUser) {
+                    creatorSearch.value = selectedUser.name;
+                }
+            }
+
+            creatorSearch.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                if (searchTerm.length === 0) {
+                    creatorResults.classList.add('hidden');
+                    return;
+                }
+
+                const filteredUsers = users.filter(user => 
+                    user.name.toLowerCase().includes(searchTerm)
+                );
+
+                if (filteredUsers.length > 0) {
+                    creatorResults.innerHTML = filteredUsers.map(user => `
+                        <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer" 
+                             data-id="${user.id}" 
+                             data-name="${user.name}">
+                            ${user.name}
+                        </div>
+                    `).join('');
+                    creatorResults.classList.remove('hidden');
+                } else {
+                    creatorResults.classList.add('hidden');
+                }
+            });
+
+            creatorResults.addEventListener('click', function(e) {
+                const target = e.target.closest('[data-id]');
+                if (target) {
+                    const userId = target.dataset.id;
+                    const userName = target.dataset.name;
+                    creatorInput.value = userId;
+                    creatorSearch.value = userName;
+                    creatorResults.classList.add('hidden');
+                }
+            });
+
+            // 點擊外部時關閉結果列表
+            document.addEventListener('click', function(e) {
+                if (!creatorSearch.contains(e.target) && !creatorResults.contains(e.target)) {
+                    creatorResults.classList.add('hidden');
+                }
+            });
+
+            // 當表單提交時，確保有選擇建立者
+            document.querySelector('form').addEventListener('submit', function(e) {
+                if (creatorSearch.value && !creatorInput.value) {
+                    e.preventDefault();
+                    alert('請從搜尋結果中選擇一個建立者');
+                }
+            });
+        });
 
         // 改為全局函數，便於 Alpine 調用
         window.showQrCode = function(qrcodeUrl) {

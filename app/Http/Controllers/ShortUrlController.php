@@ -22,6 +22,7 @@ use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
 use Intervention\Image\Geometry\Factories\RectangleFactory;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
 
 class ShortUrlController extends Controller
 {
@@ -32,11 +33,38 @@ class ShortUrlController extends Controller
 
     public function index(Request $request)
     {
-        $query = ShortUrl::query();
+        $user = Auth::user();
+        $perPage = $request->input('per_page', 10);
+        
+        $query = ShortUrl::query()
+            ->with('user')
+            ->whereNull('deleted_at');
 
-        // 如果不是管理員，只顯示自己的短網址
-        if (!optional(Auth::user())->isAdmin()) {
-            $query->where('user_id', Auth::id());
+        // 如果不是管理員，只顯示自己和同單位的短網址
+        if (!$user->isAdmin()) {
+            $query->where(function($q) use ($user) {
+                $q->where('user_id', $user->id)
+                  ->orWhereHas('user', function($q) use ($user) {
+                      $q->where('department_id', $user->department_id);
+                  });
+            });
+        }
+
+        // 建立者篩選
+        if ($request->filled('creator')) {
+            $creatorId = $request->input('creator');
+            
+            // 如果不是管理員，只能篩選同單位的建立者
+            if (!$user->isAdmin()) {
+                $creator = User::find($creatorId);
+                if (!$creator || $creator->department_id !== $user->department_id) {
+                    $creatorId = null;
+                }
+            }
+            
+            if ($creatorId) {
+                $query->where('user_id', $creatorId);
+            }
         }
 
         // 關鍵字篩選
@@ -44,7 +72,11 @@ class ShortUrlController extends Controller
             $keyword = $request->input('keyword');
             $query->where(function($q) use ($keyword) {
                 $q->where('original_url', 'like', "%{$keyword}%")
-                  ->orWhere('short_code', 'like', "%{$keyword}%");
+                  ->orWhere('short_code', 'like', "%{$keyword}%")
+                  ->orWhereHas('user', function($q) use ($keyword) {
+                      $q->where('name', 'like', "%{$keyword}%")
+                        ->orWhere('name_id', 'like', "%{$keyword}%");
+                  });
             });
         }
 
@@ -74,58 +106,41 @@ class ShortUrlController extends Controller
         }
 
         // 排序功能
-        $sortBy = $request->input('sort_by', 'created_at'); // 預設按建立時間排序
-        $sortOrder = $request->input('sort_order', 'desc'); // 預設降序排列
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortOrder = $request->input('sort_order', 'desc');
         
         // 確保排序欄位是允許的
         $allowedSortFields = ['clicks', 'created_at', 'expires_at'];
-        if (!in_array($sortBy, $allowedSortFields)) {
-            $sortBy = 'created_at';
-        }
         
-        // 確保排序方向是允許的
-        $allowedSortOrders = ['asc', 'desc'];
-        if (!in_array($sortOrder, $allowedSortOrders)) {
-            $sortOrder = 'desc';
-        }
-        
-        // 應用排序
-        $query->orderBy($sortBy, $sortOrder);
-        
-        // 特殊處理 expires_at 為 null (永久有效) 的排序情況
-        if ($sortBy === 'expires_at') {
-            if ($sortOrder === 'desc') {
-                // 降序時，null 值放在最上面
-                $query->orderByRaw('CASE WHEN expires_at IS NULL THEN 0 ELSE 1 END');
-            } else {
-                // 升序時，null 值放在最下面
-                $query->orderByRaw('CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END');
-            }
+        if (in_array($sortBy, $allowedSortFields)) {
+            $query->orderBy($sortBy, $sortOrder);
+        } else {
+            $query->orderBy('created_at', 'desc');
         }
 
-        // 獲取每頁顯示筆數，預設為 10 筆
-        $perPage = (int)$request->input('per_page', 10);
-        
-        // 設定合法的每頁筆數選項
-        $validPerPageOptions = [5, 10, 20, 30, 9999];
-        
-        // 如果不在合法選項中，預設為 10 筆
-        if (!in_array($perPage, $validPerPageOptions)) {
+        // 分頁
+        $allowedPerPage = [10, 25, 50, 100];
+        if (!in_array($perPage, $allowedPerPage)) {
             $perPage = 10;
         }
-        
-        // 分頁並帶上篩選和排序參數
-        $urls = $query->paginate($perPage)->appends($request->except('page'));
+
+        $urls = $query->paginate($perPage)->withQueryString();
+
+        // 獲取建立者清單（用於篩選）
+        $creators = User::query()
+            ->when(!$user->isAdmin(), function($q) use ($user) {
+                // 非管理員只能看到同單位的建立者
+                $q->where('department_id', $user->department_id);
+            })
+            ->orderBy('name')
+            ->get();
 
         return view('short-urls.index', [
-            'urls' => $urls, 
-            'perPage' => $perPage,
-            'keyword' => $request->input('keyword', ''),
-            'status' => $request->input('status', ''),
-            'date_from' => $request->input('date_from', ''),
-            'date_to' => $request->input('date_to', ''),
-            'sortBy' => $sortBy,
-            'sortOrder' => $sortOrder
+            'urls' => $urls,
+            'creators' => $creators,
+            'direction' => $sortOrder === 'asc' ? 'desc' : 'asc',
+            'users' => $creators,
+            'perPage' => $perPage
         ]);
     }
 
@@ -137,7 +152,8 @@ class ShortUrlController extends Controller
     public function store(Request $request)
     {
         // 基本驗證
-        $isAdmin = optional(Auth::user())->isAdmin();
+        $user = Auth::user();
+        $isAdmin = $user ? $user->isAdmin() : false;
         
         // 驗證規則
         $rules = [
@@ -145,6 +161,17 @@ class ShortUrlController extends Controller
             'expire_type' => ['required', 'string'],
             'custom_expires_at' => ['nullable', 'date', 'after:now'],
         ];
+
+        // 如果是管理員且提供了自訂代碼，則進行驗證
+        if ($isAdmin && $request->filled('custom_code')) {
+            $rules['custom_code'] = [
+                'string',
+                'regex:/^[A-Za-z0-9]+$/',
+                'min:1',
+                'max:20',
+                'unique:short_urls,short_code'
+            ];
+        }
         
         // 根據是否為管理員設置不同的驗證規則
         if ($isAdmin) {
@@ -240,10 +267,15 @@ class ShortUrlController extends Controller
             // permanent 時 $expiresAt 保持為 null
         }
 
+        // 決定短網址代碼
+        $shortCode = $request->filled('custom_code') && $isAdmin
+            ? $request->custom_code
+            : ShortUrl::generateUniqueCode();
+
         // 創建短網址
         $shortUrl = ShortUrl::create([
-            'original_url' => $url, // 使用經過驗證和可能修改的 URL
-            'short_code' => ShortUrl::generateUniqueCode(),
+            'original_url' => $url,
+            'short_code' => $shortCode,
             'user_id' => Auth::id(),
             'expires_at' => $expiresAt,
         ]);
@@ -300,16 +332,200 @@ class ShortUrlController extends Controller
         return redirect($shortUrl->original_url);
     }
 
+    /**
+     * 軟刪除短網址
+     */
     public function destroy(ShortUrl $shortUrl)
     {
-        if ($shortUrl->user_id !== Auth::id() && !optional(Auth::user())->isAdmin()) {
-            abort(403);
+        // 檢查權限
+        if (!Auth::user()?->isAdmin()) {
+            abort(403, '您沒有權限執行此操作');
         }
 
-        $shortUrl->delete();
+        try {
+            $shortUrl->delete();  // 使用軟刪除
+            
+            // 檢查請求是否需要 JSON 回應
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'message' => '短網址已刪除，可在一週內復原',
+                    'auto_cleanup_at' => $shortUrl->auto_cleanup_at->format('Y-m-d H:i:s')
+                ]);
+            }
+            
+            // 如果不是 AJAX 請求，重定向到列表頁面
+            return redirect()->route('short-urls.index')
+                ->with('success', '短網址已刪除，可在一週內復原');
+        } catch (\Exception $e) {
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'message' => '刪除失敗：' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()
+                ->with('error', '刪除失敗：' . $e->getMessage());
+        }
+    }
 
-        return redirect()->route('short-urls.index')
-            ->with('success', '短網址已刪除成功！');
+    /**
+     * 顯示已刪除的短網址列表
+     */
+    public function trashed(Request $request)
+    {
+        $query = ShortUrl::onlyTrashed();
+        $user = Auth::user();
+
+        // 如果不是管理員，只顯示自己和同單位的短網址
+        if (!$user->isAdmin()) {
+            $query->where(function($q) use ($user) {
+                $q->where('user_id', $user->id)
+                  ->orWhereHas('user', function($q) use ($user) {
+                      $q->where('department_id', $user->department_id);
+                  });
+            });
+        }
+
+        // 建立者篩選
+        if ($request->filled('creator')) {
+            $creatorId = $request->input('creator');
+            
+            // 如果不是管理員，只能篩選同單位的建立者
+            if (!$user->isAdmin()) {
+                $creator = User::find($creatorId);
+                if (!$creator || $creator->department_id !== $user->department_id) {
+                    $creatorId = null;
+                }
+            }
+            
+            if ($creatorId) {
+                $query->where('user_id', $creatorId);
+            }
+        }
+
+        // 關鍵字篩選
+        if ($request->filled('keyword')) {
+            $keyword = $request->input('keyword');
+            $query->where(function($q) use ($keyword) {
+                $q->where('original_url', 'like', "%{$keyword}%")
+                  ->orWhere('short_code', 'like', "%{$keyword}%")
+                  ->orWhereHas('user', function($q) use ($keyword) {
+                      $q->where('name', 'like', "%{$keyword}%")
+                        ->orWhere('name_id', 'like', "%{$keyword}%");
+                  });
+            });
+        }
+
+        // 日期範圍篩選 - 刪除時間
+        if ($request->filled('date_from')) {
+            $query->whereDate('deleted_at', '>=', $request->input('date_from'));
+        }
+        
+        if ($request->filled('date_to')) {
+            $query->whereDate('deleted_at', '<=', $request->input('date_to'));
+        }
+
+        // 排序功能
+        $sortBy = $request->input('sort_by', 'deleted_at');
+        $sortOrder = $request->input('sort_order', 'desc');
+        
+        // 確保排序欄位是允許的
+        $allowedSortFields = ['deleted_at', 'user_name'];
+        
+        if (in_array($sortBy, $allowedSortFields)) {
+            if ($sortBy === 'user_name') {
+                $query->join('users', 'short_urls.user_id', '=', 'users.id')
+                      ->orderBy('users.name', $sortOrder)
+                      ->select('short_urls.*');
+            } else {
+                $query->orderBy($sortBy, $sortOrder);
+            }
+        } else {
+            $query->orderBy('deleted_at', 'desc');
+        }
+
+        // 分頁設定
+        $perPage = (int) $request->input('per_page', 10);
+        $allowedPerPage = [5, 10, 20, 30, 9999];
+        if (!in_array($perPage, $allowedPerPage)) {
+            $perPage = 10;
+        }
+
+        $trashedUrls = $query->paginate($perPage)->withQueryString();
+
+        // 獲取建立者清單（用於篩選）
+        $creators = User::query()
+            ->when(!$user->isAdmin(), function($q) use ($user) {
+                // 非管理員只能看到同單位的建立者
+                $q->where('department_id', $user->department_id);
+            })
+            ->orderBy('name')
+            ->get();
+
+        return view('short-urls.trashed', [
+            'trashedUrls' => $trashedUrls,
+            'creators' => $creators,
+            'direction' => $sortOrder === 'asc' ? 'desc' : 'asc',
+            'users' => $creators, // 為了相容性保留這個變數名
+            'perPage' => $perPage // 添加 perPage 變數
+        ]);
+    }
+
+    /**
+     * 復原已刪除的短網址
+     */
+    public function restore($id)
+    {
+        $shortUrl = ShortUrl::onlyTrashed()->findOrFail($id);
+
+        // 檢查權限
+        if (!Auth::user()?->isAdmin()) {
+            abort(403, '您沒有權限執行此操作');
+        }
+
+        // 檢查是否可以復原
+        if (!$shortUrl->canRestore()) {
+            return response()->json([
+                'message' => '此短網址已超過可復原期限'
+            ], 400);
+        }
+
+        try {
+            $shortUrl->restore();
+            
+            return response()->json([
+                'message' => '短網址已成功復原'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => '復原失敗：' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * 永久刪除短網址
+     */
+    public function forceDelete($id)
+    {
+        $shortUrl = ShortUrl::onlyTrashed()->findOrFail($id);
+
+        // 檢查權限
+        if (!Auth::user()?->isAdmin()) {
+            abort(403, '您沒有權限執行此操作');
+        }
+
+        try {
+            $shortUrl->forceDelete();
+            
+            return response()->json([
+                'message' => '短網址已永久刪除'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => '永久刪除失敗：' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -332,7 +548,7 @@ class ShortUrlController extends Controller
 
     public function showClicks(ShortUrl $shortUrl, Request $request)
     {
-        if ($shortUrl->user_id !== Auth::id() && !optional(Auth::user())->isAdmin()) {
+        if ($shortUrl->user_id !== Auth::id() && !Auth::user()?->isAdmin()) {
             abort(403);
         }
 

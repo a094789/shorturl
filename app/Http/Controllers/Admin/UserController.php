@@ -41,9 +41,11 @@ class UserController extends Controller
         
         // 權限篩選
         if ($role === 'admin') {
-            $users->where('is_admin', true);
-        } elseif ($role === 'user') {
-            $users->where('is_admin', false);
+            $users->where('role_id', 1);
+        } elseif ($role === 'aw4') {
+            $users->where('role_id', 2);
+        } elseif ($role === 'employees') {
+            $users->where('role_id', 3);
         }
         
         // 註冊日期範圍篩選
@@ -177,5 +179,27 @@ class UserController extends Controller
 
         $user->delete();
         return back()->with('success', '已刪除使用者');
+    }
+
+    /**
+     * 即時搜尋用戶
+     */
+    public function search(Request $request)
+    {
+        $keyword = $request->input('keyword');
+        
+        if (empty($keyword)) {
+            return response()->json([]);
+        }
+
+        $users = User::where(function($query) use ($keyword) {
+                $query->where('name', 'like', "%{$keyword}%")
+                    ->orWhere('email', 'like', "%{$keyword}%");
+            })
+            ->select('id', 'name', 'email')
+            ->limit(10)
+            ->get();
+
+        return response()->json($users);
     }
 } 
