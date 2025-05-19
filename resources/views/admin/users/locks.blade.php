@@ -28,7 +28,12 @@
                             <h3 class="text-lg font-medium text-gray-900 mb-1">被鎖定的用戶</h3>
                             <p class="text-sm text-gray-600">這些用戶因為多次登錄失敗而被臨時鎖定。</p>
                         </div>
-                        <a href="{{ route('admin.users.index') }}" class="text-sm text-blue-600 hover:text-blue-900">返回用戶管理</a>
+                        <a href="{{ route('admin.users.index') }}" class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            返回用戶管理
+                        </a>
                     </div>
 
                     <!-- 篩選狀態摘要 -->
@@ -260,8 +265,10 @@
                                             <form method="POST" action="{{ route('admin.user-locks.unlock') }}">
                                                 @csrf
                                                 <input type="hidden" name="key" value="{{ $user['key'] }}">
-                                                <button type="submit" class="font-medium text-blue-600 hover:text-blue-900">
-                                                    解除鎖定
+                                                <button type="submit" class="text-blue-600 hover:text-blue-900" title="解除鎖定">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                                      <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                                    </svg>
                                                 </button>
                                             </form>
                                         </td>

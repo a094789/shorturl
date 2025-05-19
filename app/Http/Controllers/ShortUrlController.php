@@ -41,13 +41,8 @@ class ShortUrlController extends Controller
             ->whereNull('deleted_at');
 
         // 如果不是管理員，只顯示自己和同單位的短網址
-        if (!$user->isAdmin()) {
-            $query->where(function($q) use ($user) {
-                $q->where('user_id', $user->id)
-                  ->orWhereHas('user', function($q) use ($user) {
-                      $q->where('department_id', $user->department_id);
-                  });
-            });
+        if ($user && !$user->isAdmin()) {
+            $query->where('user_id', $user->id);
         }
 
         // 建立者篩選
@@ -55,7 +50,7 @@ class ShortUrlController extends Controller
             $creatorId = $request->input('creator');
             
             // 如果不是管理員，只能篩選同單位的建立者
-            if (!$user->isAdmin()) {
+            if ($user && !$user->isAdmin()) {
                 $creator = User::find($creatorId);
                 if (!$creator || $creator->department_id !== $user->department_id) {
                     $creatorId = null;
@@ -128,7 +123,7 @@ class ShortUrlController extends Controller
 
         // 獲取建立者清單（用於篩選）
         $creators = User::query()
-            ->when(!$user->isAdmin(), function($q) use ($user) {
+            ->when($user && !$user->isAdmin(), function($q) use ($user) {
                 // 非管理員只能看到同單位的建立者
                 $q->where('department_id', $user->department_id);
             })
@@ -338,8 +333,9 @@ class ShortUrlController extends Controller
     public function destroy(ShortUrl $shortUrl)
     {
         // 檢查權限
-        if (!Auth::user()?->isAdmin()) {
-            abort(403, '您沒有權限執行此操作');
+        $user = Auth::user();
+        if ($user && !$user->isAdmin() && $shortUrl->user_id !== $user->id) {
+            abort(403, '您沒有權限刪除此短網址');
         }
 
         try {
@@ -377,13 +373,8 @@ class ShortUrlController extends Controller
         $user = Auth::user();
 
         // 如果不是管理員，只顯示自己和同單位的短網址
-        if (!$user->isAdmin()) {
-            $query->where(function($q) use ($user) {
-                $q->where('user_id', $user->id)
-                  ->orWhereHas('user', function($q) use ($user) {
-                      $q->where('department_id', $user->department_id);
-                  });
-            });
+        if ($user && !$user->isAdmin()) {
+            $query->where('user_id', $user->id);
         }
 
         // 建立者篩選
@@ -391,7 +382,7 @@ class ShortUrlController extends Controller
             $creatorId = $request->input('creator');
             
             // 如果不是管理員，只能篩選同單位的建立者
-            if (!$user->isAdmin()) {
+            if ($user && !$user->isAdmin()) {
                 $creator = User::find($creatorId);
                 if (!$creator || $creator->department_id !== $user->department_id) {
                     $creatorId = null;
@@ -455,7 +446,7 @@ class ShortUrlController extends Controller
 
         // 獲取建立者清單（用於篩選）
         $creators = User::query()
-            ->when(!$user->isAdmin(), function($q) use ($user) {
+            ->when($user && !$user->isAdmin(), function($q) use ($user) {
                 // 非管理員只能看到同單位的建立者
                 $q->where('department_id', $user->department_id);
             })
@@ -479,8 +470,9 @@ class ShortUrlController extends Controller
         $shortUrl = ShortUrl::onlyTrashed()->findOrFail($id);
 
         // 檢查權限
-        if (!Auth::user()?->isAdmin()) {
-            abort(403, '您沒有權限執行此操作');
+        $user = Auth::user();
+        if (!$user->isAdmin() && $shortUrl->user_id !== $user->id) {
+            abort(403, '您沒有權限復原此短網址');
         }
 
         // 檢查是否可以復原
@@ -511,7 +503,8 @@ class ShortUrlController extends Controller
         $shortUrl = ShortUrl::onlyTrashed()->findOrFail($id);
 
         // 檢查權限
-        if (!Auth::user()?->isAdmin()) {
+        $user = Auth::user();
+        if ($user && !$user->isAdmin() && $shortUrl->user_id !== $user->id) {
             abort(403, '您沒有權限執行此操作');
         }
 
